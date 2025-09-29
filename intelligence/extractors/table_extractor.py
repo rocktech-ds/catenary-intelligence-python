@@ -26,6 +26,7 @@ from ..models.target_schemas import (
     PORTUGUESE_PATTERNS
 )
 from ..ai.llm_client import LLMClient
+from .component_matcher import ComponentMatcher
 
 class TableExtractor:
     """
@@ -39,6 +40,7 @@ class TableExtractor:
         self.config = config
         self.table_transformer_model = None
         self.llm_client = LLMClient(config)
+        self.component_matcher = ComponentMatcher()
         self._loaded = False
     
     def load_models(self):
@@ -295,6 +297,86 @@ class TableExtractor:
                 merged.append(new_table)
         
         return merged
+
+    def _enhance_bom_with_components(self, table: TableData) -> TableData:
+        """Enhance BOM table by matching components from parts database"""
+        if table.table_type != 'bom':
+            return table
+
+        try:
+            # Convert table data to processable format
+            bom_items = self._extract_bom_items_from_table(table)
+
+            # Match components
+            matched_items = self.component_matcher.batch_match_components(bom_items)
+
+            # Update table data with matched components
+            enhanced_table = self._update_table_with_matches(table, matched_items)
+
+            logger.info(f"Enhanced BOM table {table.id} with {len(matched_items)} component matches")
+            return enhanced_table
+
+        except Exception as e:
+            logger.warning(f"Failed to enhance BOM table {table.id} with components: {e}")
+            return table
+
+    def _extract_bom_items_from_table(self, table: TableData) -> List[Dict]:
+        """Extract individual BOM items from table data"""
+        items = []
+        headers = [h.lower() for h in table.headers]
+
+        # Map headers to standard fields
+        header_mapping = {}
+        for i, header in enumerate(headers):
+            if any(kw in header for kw in ['nomenclat', 'nomenclatura']):
+                header_mapping['nomenclatura'] = i
+            elif any(kw in header for kw in ['ref', 'referência']):
+                header_mapping['ref'] = i
+            elif any(kw in header for kw in ['codigo', 'código', 'code']):
+                header_mapping['codigo'] = i
+            elif any(kw in header for kw in ['designa', 'description']):
+                header_mapping['designacao'] = i
+            elif any(kw in header for kw in ['quantidade', 'qtd', 'qty']):
+                header_mapping['quantidade'] = i
+
+        # Extract items
+        for row in table.data:
+            if len(row) >= len(headers):
+                item = {}
+
+                # Extract values based on header mapping
+                for field, col_idx in header_mapping.items():
+                    if col_idx < len(row):
+                        item[field] = row[col_idx].strip() if row[col_idx] else ""
+
+                # Only add items that have some identifying information
+                if any(item.get(field) for field in ['nomenclatura', 'codigo', 'ref', 'designacao']):
+                    items.append(item)
+
+        return items
+
+    def _update_table_with_matches(self, table: TableData, matched_items: List[Dict]) -> TableData:
+        """Update table with component matching information"""
+        enhanced_table = table.model_copy()
+
+        # Add metadata about component matches
+        match_stats = {
+            'total_items': len(matched_items),
+            'matched_items': sum(1 for item in matched_items if item.get('match_confidence', 0) > 0),
+            'high_confidence_matches': sum(1 for item in matched_items if item.get('match_confidence', 0) > 90),
+            'average_confidence': sum(item.get('match_confidence', 0) for item in matched_items) / len(matched_items) if matched_items else 0
+        }
+
+        enhanced_table.metadata = enhanced_table.metadata or {}
+        enhanced_table.metadata['component_matches'] = match_stats
+        enhanced_table.metadata['components'] = matched_items
+
+        # Update confidence based on component matching success
+        if match_stats['matched_items'] > 0:
+            component_bonus = min(20, match_stats['matched_items'] / match_stats['total_items'] * 20)
+            enhanced_table.confidence = min(100, enhanced_table.confidence + component_bonus)
+
+        return enhanced_table
     
     async def _enhance_tables_with_ai(self, tables: List[TableData], file_path: Path, request: AnalysisRequest) -> List[TableData]:
         """Enhance extracted tables with AI-powered analysis"""
@@ -310,12 +392,22 @@ class TableExtractor:
                 
                 # Apply AI enhancements
                 enhanced_table = await self._ai_enhance_table(table, request)
+
+                # Apply component matching for BOM tables
+                if enhanced_table.table_type == 'bom':
+                    enhanced_table = self._enhance_bom_with_components(enhanced_table)
+
                 enhanced.append(enhanced_table)
                 
             except Exception as e:
                 logger.warning(f"Failed to enhance table {table.id}: {e}")
                 # Fallback to rule-based enhancement
                 enhanced_table = self._add_engineering_context(table)
+
+                # Apply component matching for BOM tables even in fallback
+                if enhanced_table.table_type == 'bom':
+                    enhanced_table = self._enhance_bom_with_components(enhanced_table)
+
                 enhanced.append(enhanced_table)
         
         return enhanced
@@ -346,10 +438,22 @@ class TableExtractor:
     def _identify_table_type(self, table: TableData) -> str:
         """Identify the type of engineering table"""
         headers_text = ' '.join(table.headers).lower()
-        
-        # BOM (Bill of Materials) detection
-        bom_keywords = ['item', 'qty', 'quantity', 'part', 'description', 'material']
-        if any(keyword in headers_text for keyword in bom_keywords):
+
+        # BOM (Bill of Materials) detection - Portuguese and English
+        bom_keywords = [
+            # Portuguese BOM keywords
+            'nomenclat', 'nomenclatura', 'designação', 'designacao',
+            'ref.', 'ref', 'referência', 'codigo', 'código',
+            'quantidade', 'qtd', 'qnt', 'peso', 'observações', 'observacoes',
+            'desenho', 'material', 'especificação', 'especificacao',
+            # English BOM keywords
+            'item', 'qty', 'quantity', 'part', 'description', 'material',
+            'reference', 'code', 'weight', 'notes', 'drawing'
+        ]
+
+        # Count matching keywords (need at least 2 for BOM identification)
+        bom_matches = sum(1 for keyword in bom_keywords if keyword in headers_text)
+        if bom_matches >= 2:
             return 'bom'
         
         # Schedule detection

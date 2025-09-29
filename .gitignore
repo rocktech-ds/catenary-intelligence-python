@@ -167,3 +167,12 @@ docker-compose.override.yml
 test_*.py
 *_test.py
 temp_*.txt
+
+# Analysis storage
+analysis_storage.json
+
+# Backup and fix files
+*_backup.py
+*_backup_*
+fix_*.py
+main_backup*.py
