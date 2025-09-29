@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  catenary-redis:
+    image: redis:7-alpine
+    container_name: catenary-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - default
+      - catenary-network
+
+  catenary-intelligence:
+    build: .
+    container_name: catenary-intelligence
+    ports:
+      - "8002:8003"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://catenary-redis:6379/0
+      - REDIS_HOST=catenary-redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      - REDIS_TTL=3600  # Cache TTL in seconds (1 hour)
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    depends_on:
+      catenary-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - default
+      - catenary-network
+
+networks:
+  catenary-network:
+    external: true
+  default:
+    driver: bridge
+
+volumes:
+  redis_data:
+    driver: local

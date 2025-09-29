@@ -1,0 +1,8 @@
+version: '3.8'
+
+services:
+  catenary-intelligence:
+    container_name: catenary-enhanced-catenary-intelligence-enhanced
+    labels:
+      - "com.docker.compose.project=catenary-enhanced"
+      - "com.docker.compose.service=intelligence"

@@ -1,0 +1,40 @@
+# Core dependencies
+fastapi==0.104.1
+uvicorn==0.24.0
+pydantic==2.5.0
+python-multipart==0.0.6
+
+# HTTP and async
+httpx==0.25.2
+aiofiles==23.2.1
+
+# Database
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.9
+
+# AI providers
+google-generativeai==0.3.0
+groq==0.4.1
+
+# PDF processing
+pdfplumber==0.10.3
+PyPDF2==3.0.1
+pymupdf==1.23.8
+tabula-py==2.9.0
+camelot-py[cv]==0.11.0
+
+# Data processing
+pandas==2.1.3
+numpy==1.24.3
+
+# Image processing
+opencv-python==4.8.1.78
+Pillow==10.1.0
+
+# OCR
+pytesseract==0.3.10
+
+# Utils
+python-dotenv==1.0.0
+loguru==0.7.2
+asyncpg

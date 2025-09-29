@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  pdf-intelligence-pipeline:
+    build:
+      context: ./python-analyzer
+      dockerfile: Dockerfile.intelligence
+    container_name: pdf-intelligence-pipeline
+    ports:
+      - "8002:8002"
+    environment:
+      # Core settings
+      - MAX_WORKERS=4
+      - ANALYSIS_TIMEOUT=1800
+      - MAX_FILE_SIZE_MB=500
+      - ENABLE_CACHE=true
+      
+      # Model paths
+      - MODELS_DIR=/app/models
+      
+      # OCR settings
+      - TESSERACT_CONFIG=--oem 3 --psm 6
+      - PADDLE_OCR_LANG=pt,en
+      - OCR_CONFIDENCE_THRESHOLD=0.6
+      
+      # Performance tuning
+      - OPENCV_THREADS=4
+      - MULTIPROCESSING_WORKERS=2
+      - MEMORY_LIMIT_GB=8
+      
+      # API settings
+      - API_TIMEOUT=300
+      - MAX_CONCURRENT_ANALYSES=10
+      
+      # Quality thresholds
+      - MIN_EXTRACTION_CONFIDENCE=0.5
+      - TABLE_QUALITY_THRESHOLD=0.6
+      
+      # Monitoring
+      - PROMETHEUS_ENABLED=true
+      - LOG_LEVEL=INFO
+    
+    volumes:
+      - ./python-analyzer/models:/app/models
+      - ./python-analyzer/temp:/tmp/pdf_intelligence
+    
+    networks:
+      - catenary-network
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+          cpus: '2.5'
+        reservations:
+          memory: 3G
+          cpus: '1.5'
+
+networks:
+  catenary-network:
+    external: true

@@ -1,0 +1,75 @@
+networks:
+  catenary-network:
+    external: true
+  default:
+    driver: bridge
+services:
+  catenary-intelligence:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: catenary-intelligence
+    deploy:
+      resources:
+        limits:
+          cpus: '3.0'
+          memory: 8G
+        reservations:
+          cpus: '2.0'
+          memory: 4G
+    environment:
+    - PYTHONPATH=/app
+    - PYTHONUNBUFFERED=1
+    - ENVIRONMENT=production
+    - SERVICE_NAME=catenary-intelligence
+    - SERVICE_VERSION=2.0.0
+    - LOG_LEVEL=INFO
+    - MAX_WORKERS=4
+    - ANALYSIS_TIMEOUT=1800
+    - MAX_FILE_SIZE_MB=500
+    - ENABLE_CACHE=true
+    - GROQ_API_KEY=${GROQ_API_KEY:-}
+    - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    - XAI_API_KEY=${XAI_API_KEY:-}
+    - XAI_MODEL=${XAI_MODEL:-grok-beta}
+    - XAI_BASE_URL=${XAI_BASE_URL:-https://api.x.ai/v1}
+    - OPENCV_THREADS=4
+    - MULTIPROCESSING_WORKERS=2
+    - MEMORY_LIMIT_GB=8
+    - SUPABASE_URL=http://catenary-kong:8000
+    - SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJjYXRlbmFyeSIsInJvbGUiOiJzZXJ2aWNlX3JvbGUiLCJpYXQiOjE3NTgzMDg3MDEsImV4cCI6MjM4OTAyODcwMX0.Eu_O_phLffNBFdoeJfj5AjZNj7Hw3Pbgok20bBEvMb8
+    - SUPABASE_DB_URL=postgres://postgres:CaTy2025SecureDB_7aa74fde@catenary-db:5432/catenary_transport
+    - MIN_EXTRACTION_CONFIDENCE=0.5
+    - TABLE_QUALITY_THRESHOLD=0.6
+    healthcheck:
+      interval: 30s
+      retries: 3
+      start_period: 90s
+      test:
+      - CMD
+      - python
+      - -c
+      - import requests; requests.get("http://localhost:8003/health")
+      timeout: 10s
+    networks:
+    - catenary-network
+    - default
+    ports:
+    - 8002:8003
+    restart: unless-stopped
+    volumes:
+    - intelligence_logs:/app/logs
+    - intelligence_temp:/app/temp
+    - intelligence_uploads:/app/uploads
+    - intelligence_models:/app/models
+version: '3.8'
+volumes:
+  intelligence_logs:
+    driver: local
+  intelligence_models:
+    driver: local
+  intelligence_temp:
+    driver: local
+  intelligence_uploads:
+    driver: local

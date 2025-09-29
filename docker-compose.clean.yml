@@ -1,0 +1,75 @@
+version: '3.8'
+
+# CATENARY INTELLIGENCE
+# AI-powered document analysis and intelligence service
+
+networks:
+  supabase_default:
+    external: true
+
+services:
+  # Intelligence Service
+  intelligence:
+    container_name: catenary-intelligence
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      # Service Configuration
+      - ENVIRONMENT=production
+      - LOG_LEVEL=info
+      - HOST=0.0.0.0
+      - PORT=8003
+      
+      # Database Connection (optional for future use)
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-zXj9Qm3nP2025SecureDB}@supabase-db:5432/postgres
+      
+      # AI/ML Configuration
+      - MODEL_CACHE_DIR=/app/models
+      - TEMP_DIR=/app/temp
+      - UPLOAD_DIR=/app/uploads
+      - MAX_FILE_SIZE=100MB
+      
+      # OCR Configuration
+      - TESSERACT_DATA_PATH=/usr/share/tesseract-ocr/5/tessdata
+      - OCR_LANGUAGES=eng,por
+      
+      # Processing Limits
+      - MAX_CONCURRENT_JOBS=3
+      - WORKER_TIMEOUT=300
+    ports:
+      - "8002:8003"
+    volumes:
+      - ./logs:/app/logs
+      - ./temp:/app/temp
+      - ./uploads:/app/uploads
+      - ./models:/app/models
+    networks:
+      - supabase_default
+    labels:
+      - "project=catenary-intelligence"
+      - "component=ai-service"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Nginx Proxy (Optional)
+  nginx:
+    container_name: catenary-intelligence-nginx
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - intelligence
+    networks:
+      - supabase_default
+    labels:
+      - "project=catenary-intelligence"
+      - "component=proxy"
