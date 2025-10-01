@@ -9,6 +9,8 @@ import httpx
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 import logging
+import numpy as np
+import pandas as pd
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -127,11 +129,13 @@ async def create_analysis_job_db(job_id: str, document_id: str, user_id: str = "
 async def update_analysis_job_db(job_id: str, status: str, results: dict = None, error: str = None, progress: int = 0):
     """Update analysis job directly in PostgreSQL database with progress tracking"""
     if not job_id:
-        print("❌ No job_id provided to update_analysis_job_db")
+        print("❌ [DB-UPDATE] No job_id provided to update_analysis_job_db")
+        logger.error("❌ [DB-UPDATE] No job_id provided to update_analysis_job_db")
         return
 
     try:
-        print(f"🔄 Database update called: job_id={job_id}, status={status}, progress={progress}")
+        print(f"🔄 [DB-UPDATE] Database update called: job_id={job_id}, status={status}, progress={progress}")
+        logger.info(f"🔄 [DB-UPDATE] Database update called: job_id={job_id}, status={status}, progress={progress}")
 
         # Determine current step based on progress and status
         if status == "processing":
@@ -158,35 +162,159 @@ async def update_analysis_job_db(job_id: str, status: str, results: dict = None,
         else:
             current_step = f"Analysis {status}"
 
-        print(f"📝 Connecting to database for job {job_id}")
+        print(f"📝 [DB-UPDATE] Current step determined: {current_step}")
+        print(f"📝 [DB-UPDATE] Connecting to database for job {job_id}")
+        logger.info(f"📝 [DB-UPDATE] Connecting to database for job {job_id} with current_step: {current_step}")
+
         # Connect to PostgreSQL using container hostname
         database_url = "postgresql://postgres:CaTy2025SecureDB_7aa74fde@catenary-db:5432/postgres"
-        conn = await asyncpg.connect(database_url)
+        print(f"📡 [DB-UPDATE] Using database URL: {database_url}")
 
         try:
-            print(f"📞 Calling database function for job {job_id}")
-            # Call the PostgreSQL function
-            result = await conn.fetchval(
-                "SELECT update_analysis_job_progress($1, $2, $3, $4, $5, $6)",
-                job_id, status, progress, current_step,
-                results if results else None,
-                error
-            )
+            conn = await asyncpg.connect(database_url)
+            print(f"✅ [DB-UPDATE] Database connection established for job {job_id}")
+            logger.info(f"✅ [DB-UPDATE] Database connection established for job {job_id}")
+        except Exception as conn_error:
+            print(f"❌ [DB-UPDATE] Failed to connect to database: {conn_error}")
+            logger.error(f"❌ [DB-UPDATE] Failed to connect to database: {conn_error}")
+            raise
 
-            if result:
-                logger.info(f"✅ Updated job {job_id} to {status} (progress: {progress}%)")
-                print(f"✅ Database update successful for job {job_id}")
+        try:
+            # First, check if the job exists
+            print(f"🔍 [DB-UPDATE] Checking if job {job_id} exists in database")
+            job_exists = await conn.fetchval(
+                "SELECT EXISTS(SELECT 1 FROM analysis_jobs WHERE id = $1)",
+                job_id
+            )
+            print(f"🔍 [DB-UPDATE] Job {job_id} exists: {job_exists}")
+            logger.info(f"🔍 [DB-UPDATE] Job {job_id} exists: {job_exists}")
+
+            if not job_exists:
+                print(f"⚠️ [DB-UPDATE] Job {job_id} not found in database - creating it")
+                logger.warning(f"⚠️ [DB-UPDATE] Job {job_id} not found in database - creating it")
+                # Try to create the job if it doesn't exist
+                await conn.execute("""
+                    INSERT INTO analysis_jobs (id, status, progress, current_step, updated_at)
+                    VALUES ($1, $2, $3, $4, NOW())
+                    ON CONFLICT (id) DO NOTHING
+                """, job_id, status, progress, current_step)
+                print(f"✅ [DB-UPDATE] Created missing job {job_id} in database")
+                logger.info(f"✅ [DB-UPDATE] Created missing job {job_id} in database")
+
+            # Check if the database function exists
+            print(f"🔍 [DB-UPDATE] Checking if update_analysis_job_progress function exists")
+            function_exists = await conn.fetchval("""
+                SELECT EXISTS(
+                    SELECT 1 FROM pg_proc p
+                    JOIN pg_namespace n ON p.pronamespace = n.oid
+                    WHERE p.proname = 'update_analysis_job_progress' AND n.nspname = 'public'
+                )
+            """)
+            print(f"🔍 [DB-UPDATE] Function update_analysis_job_progress exists: {function_exists}")
+            logger.info(f"🔍 [DB-UPDATE] Function update_analysis_job_progress exists: {function_exists}")
+
+            if function_exists:
+                print(f"📞 [DB-UPDATE] Calling database function for job {job_id}")
+                logger.info(f"📞 [DB-UPDATE] Calling database function with params: job_id={job_id}, status={status}, progress={progress}, current_step={current_step}, results={json.dumps(results) if results else None}, error={error}")
+
+                # Call the PostgreSQL function (it returns void, not a value)
+                await conn.execute(
+                    "SELECT update_analysis_job_progress($1, $2, $3, $4, $5, $6)",
+                    job_id, status, progress, current_step,
+                    json.dumps(results) if results else None,
+                    error
+                )
+                print(f"✅ [DB-UPDATE] Function executed successfully for job {job_id}")
+                logger.info(f"✅ [DB-UPDATE] Function executed successfully for job {job_id}")
+
+                # Verify the update worked by checking if the job exists and was updated
+                job_check = await conn.fetchval(
+                    "SELECT status FROM analysis_jobs WHERE id = $1",
+                    job_id
+                )
+
+                if job_check:
+                    logger.info(f"✅ [DB-UPDATE] Verified job {job_id} updated to status: {job_check}")
+                    print(f"✅ [DB-UPDATE] Database update successful for job {job_id} - status: {job_check}")
+                else:
+                    logger.warning(f"⚠️ [DB-UPDATE] Job {job_id} not found after update attempt")
+                    print(f"⚠️ [DB-UPDATE] Job {job_id} not found after update attempt")
             else:
-                logger.warning(f"⚠️ Job {job_id} not found in database")
-                print(f"⚠️ Job {job_id} not found in database")
+                # Function doesn't exist, use direct SQL update
+                print(f"📝 [DB-UPDATE] Function not found, using direct SQL update for job {job_id}")
+                logger.info(f"📝 [DB-UPDATE] Function not found, using direct SQL update for job {job_id}")
+
+                update_data = {
+                    'status': status,
+                    'progress': progress,
+                    'current_step': current_step,
+                    'updated_at': datetime.utcnow()
+                }
+
+                if status == 'completed':
+                    update_data['completed_at'] = datetime.utcnow()
+                    if results:
+                        update_data['results'] = json.dumps(results)
+                        # Calculate processing time if we have started_at
+                        processing_time_result = await conn.fetchval(
+                            "SELECT EXTRACT(EPOCH FROM (NOW() - started_at)) FROM analysis_jobs WHERE id = $1",
+                            job_id
+                        )
+                        if processing_time_result:
+                            update_data['processing_time_seconds'] = float(processing_time_result)
+                            print(f"📊 [DB-UPDATE] Calculated processing time: {processing_time_result}s")
+
+                if error:
+                    update_data['error_message'] = error
+
+                # Build dynamic SQL update
+                set_clauses = []
+                values = []
+                param_count = 1
+
+                for key, value in update_data.items():
+                    if key == 'updated_at':
+                        set_clauses.append(f"{key} = NOW()")
+                    elif key == 'completed_at' and value:
+                        set_clauses.append(f"{key} = NOW()")
+                    else:
+                        set_clauses.append(f"{key} = ${param_count}")
+                        values.append(value)
+                        param_count += 1
+
+                values.append(job_id)  # WHERE condition
+                sql = f"UPDATE analysis_jobs SET {', '.join(set_clauses)} WHERE id = ${param_count}"
+
+                print(f"📝 [DB-UPDATE] Executing SQL: {sql}")
+                print(f"📝 [DB-UPDATE] With values: {values}")
+                logger.info(f"📝 [DB-UPDATE] Executing SQL: {sql} with values: {values}")
+
+                result = await conn.execute(sql, *values)
+                rows_affected = int(result.split()[-1]) if result else 0
+
+                print(f"📊 [DB-UPDATE] Rows affected: {rows_affected}")
+                logger.info(f"📊 [DB-UPDATE] Rows affected: {rows_affected}")
+
+                if rows_affected > 0:
+                    print(f"✅ [DB-UPDATE] Successfully updated job {job_id} to {status} (progress: {progress}%)")
+                    logger.info(f"✅ [DB-UPDATE] Successfully updated job {job_id} to {status} (progress: {progress}%)")
+                else:
+                    print(f"⚠️ [DB-UPDATE] No rows updated for job {job_id} - job may not exist")
+                    logger.warning(f"⚠️ [DB-UPDATE] No rows updated for job {job_id} - job may not exist")
 
         finally:
             await conn.close()
-            print(f"🔌 Database connection closed for job {job_id}")
+            print(f"🔌 [DB-UPDATE] Database connection closed for job {job_id}")
+            logger.info(f"🔌 [DB-UPDATE] Database connection closed for job {job_id}")
 
     except Exception as e:
-        logger.error(f"❌ Failed to update job {job_id}: {e}")
-        print(f"❌ EXCEPTION in update_analysis_job_db for job {job_id}: {e}")
+        logger.error(f"❌ [DB-UPDATE] Failed to update job {job_id}: {e}")
+        print(f"❌ [DB-UPDATE] EXCEPTION in update_analysis_job_db for job {job_id}: {e}")
+        print(f"❌ [DB-UPDATE] Exception type: {type(e).__name__}")
+        print(f"❌ [DB-UPDATE] Exception details: {str(e)}")
+        import traceback
+        print(f"❌ [DB-UPDATE] Traceback: {traceback.format_exc()}")
+        logger.error(f"❌ [DB-UPDATE] Traceback: {traceback.format_exc()}")
 
 async def is_analysis_cancelled(job_id: str) -> bool:
     """Check if analysis has been cancelled"""
@@ -200,25 +328,49 @@ async def analyze_document(request: AnalysisRequest):
     analysis_id = f"analysis_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
 
     try:
-        logger.info(f"Starting analysis {analysis_id} for file: {request.file_url}")
-        print(f"📋 About to start analysis task for job_id: {request.job_id}")
+        print(f"🚀 [ANALYZE] ================== NEW ANALYSIS REQUEST ==================")
+        print(f"🚀 [ANALYZE] Analysis ID: {analysis_id}")
+        print(f"🚀 [ANALYZE] Job ID: {request.job_id}")
+        print(f"🚀 [ANALYZE] File URL: {request.file_url}")
+        print(f"🚀 [ANALYZE] Tools: {request.tools}")
+        print(f"🚀 [ANALYZE] AI Providers: {request.ai_providers}")
+        print(f"🚀 [ANALYZE] Analysis Types: {request.analysis_types}")
+        print(f"🚀 [ANALYZE] Options: {request.options}")
+        print(f"🚀 [ANALYZE] ==========================================================")
+
+        logger.info(f"[ANALYZE] Starting analysis {analysis_id} for file: {request.file_url}")
+        logger.info(f"[ANALYZE] Job ID: {request.job_id}, Tools: {request.tools}")
+        print(f"📋 [ANALYZE] About to start analysis task for job_id: {request.job_id}")
 
         # Initialize analysis in storage
+        print(f"💾 [ANALYZE] Initializing analysis storage for {analysis_id}")
         analysis_storage[analysis_id] = {
             "status": "pending",
             "job_id": request.job_id,
             "started_at": datetime.utcnow().isoformat()
         }
         save_analysis_storage(analysis_storage)
+        print(f"✅ [ANALYZE] Analysis storage initialized and saved")
+        logger.info(f"[ANALYZE] Analysis storage initialized for {analysis_id}")
 
         # Track active analysis
         if request.job_id:
+            print(f"📊 [ANALYZE] Tracking active analysis: job_id={request.job_id}, analysis_id={analysis_id}")
             active_analyses[request.job_id] = analysis_id
+            logger.info(f"[ANALYZE] Added to active analyses: {request.job_id} -> {analysis_id}")
+        else:
+            print(f"⚠️ [ANALYZE] No job_id provided - analysis will not be tracked in active_analyses")
+            logger.warning(f"[ANALYZE] No job_id provided for analysis {analysis_id}")
 
         # Create analysis job record in database first
         if request.job_id:
+            print(f"📋 [ANALYZE] Creating database record for job: {request.job_id}")
+            logger.info(f"[ANALYZE] Creating database record for job: {request.job_id}")
+
             # Extract document ID from file URL if available
             document_id = "00000000-0000-0000-0000-000000000000"  # Default fallback
+            print(f"🔍 [ANALYZE] Extracting document ID from URL: {request.file_url}")
+
             if "/documents/" in request.file_url:
                 try:
                     # Extract document ID from URL like: .../documents/86a70a15-9066-4348-a0be-8d0d81cf8cd8/...
@@ -227,8 +379,19 @@ async def analyze_document(request: AnalysisRequest):
                         doc_part = url_parts[1].split("/")[0]
                         if len(doc_part) == 36 and doc_part.count('-') == 4:  # UUID format check
                             document_id = doc_part
-                except:
-                    pass
+                            print(f"✅ [ANALYZE] Extracted document ID: {document_id}")
+                            logger.info(f"[ANALYZE] Extracted document ID: {document_id}")
+                        else:
+                            print(f"⚠️ [ANALYZE] Document part doesn't look like UUID: {doc_part}")
+                    else:
+                        print(f"⚠️ [ANALYZE] Could not split URL on /documents/")
+                except Exception as extract_error:
+                    print(f"❌ [ANALYZE] Error extracting document ID: {extract_error}")
+                    logger.error(f"[ANALYZE] Error extracting document ID: {extract_error}")
+            else:
+                print(f"⚠️ [ANALYZE] URL doesn't contain /documents/ - using default document_id")
+
+            print(f"📋 [ANALYZE] Final document_id: {document_id}")
 
             # Create job record in database
             config = {
@@ -237,14 +400,30 @@ async def analyze_document(request: AnalysisRequest):
                 "analysis_types": request.analysis_types,
                 "options": request.options
             }
-            await create_analysis_job_db(request.job_id, document_id, config=config)
+            print(f"📋 [ANALYZE] Calling create_analysis_job_db with config: {config}")
+            logger.info(f"[ANALYZE] Calling create_analysis_job_db for {request.job_id} with document {document_id}")
+
+            db_creation_result = await create_analysis_job_db(request.job_id, document_id, config=config)
+            print(f"📊 [ANALYZE] Database creation result: {db_creation_result}")
+            logger.info(f"[ANALYZE] Database creation result: {db_creation_result}")
+        else:
+            print(f"⚠️ [ANALYZE] No job_id provided - skipping database record creation")
+            logger.warning(f"[ANALYZE] No job_id provided - skipping database record creation")
 
         # Update database immediately to processing status
         if request.job_id:
+            print(f"🔄 [ANALYZE] Updating job {request.job_id} to processing status (10% progress)")
+            logger.info(f"[ANALYZE] Updating job {request.job_id} to processing status")
             await update_analysis_job_db(request.job_id, "processing", progress=10)
+            print(f"✅ [ANALYZE] Initial status update completed")
+        else:
+            print(f"⚠️ [ANALYZE] No job_id - skipping initial status update")
 
         # Start analysis as an asyncio task
-        asyncio.create_task(
+        print(f"🚀 [ANALYZE] Starting async analysis task for {analysis_id}")
+        logger.info(f"[ANALYZE] Starting async analysis task for {analysis_id}")
+
+        analysis_task = asyncio.create_task(
             run_analysis(
                 analysis_id,
                 request.file_url,
@@ -255,15 +434,41 @@ async def analyze_document(request: AnalysisRequest):
                 request.job_id
             )
         )
+        print(f"✅ [ANALYZE] Async analysis task created successfully")
+        logger.info(f"[ANALYZE] Async analysis task created for {analysis_id}")
 
-        return AnalysisResponse(
+        print(f"📤 [ANALYZE] Returning response: analysis_id={analysis_id}, status=pending")
+        logger.info(f"[ANALYZE] Returning analysis response for {analysis_id}")
+
+        response = AnalysisResponse(
             analysis_id=analysis_id,
             status="pending",
             tools_used=list(request.tools.keys())
         )
 
+        print(f"✅ [ANALYZE] Analysis request processed successfully - response ready")
+        logger.info(f"[ANALYZE] Analysis request completed successfully for {analysis_id}")
+        return response
+
     except Exception as e:
-        logger.error(f"Error starting analysis: {e}")
+        print(f"❌ [ANALYZE] CRITICAL ERROR in analyze_document: {e}")
+        print(f"❌ [ANALYZE] Exception type: {type(e).__name__}")
+        print(f"❌ [ANALYZE] Exception details: {str(e)}")
+        import traceback
+        print(f"❌ [ANALYZE] Traceback: {traceback.format_exc()}")
+
+        logger.error(f"[ANALYZE] Error starting analysis: {e}")
+        logger.error(f"[ANALYZE] Traceback: {traceback.format_exc()}")
+
+        # Try to update job to failed if we have a job_id
+        if hasattr(request, 'job_id') and request.job_id:
+            try:
+                print(f"🔄 [ANALYZE] Updating job {request.job_id} to failed status due to error")
+                await update_analysis_job_db(request.job_id, "failed", error=str(e))
+            except Exception as update_error:
+                print(f"❌ [ANALYZE] Failed to update job status to failed: {update_error}")
+                logger.error(f"[ANALYZE] Failed to update job status to failed: {update_error}")
+
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/cancel/{job_id}")
@@ -292,9 +497,19 @@ async def cancel_analysis(job_id: str):
         raise HTTPException(status_code=500, detail=f"Failed to cancel analysis: {str(e)}")
 
 async def download_document(file_url: str) -> str:
-    """Download document from URL to temporary file"""
+    """Download document from URL or copy from local file path to temporary file"""
+    if file_url.startswith("file://"):
+        # Remove file:// prefix and use local file system
+        local_path = file_url[7:]  # Remove "file://" prefix
+        if os.path.exists(local_path):
+            return local_path
+        else:
+            raise FileNotFoundError(f"Local file not found: {local_path}")
+
+    # For HTTP/HTTPS URLs, download directly (storage is public)
+    headers = {}
     async with httpx.AsyncClient() as client:
-        response = await client.get(file_url)
+        response = await client.get(file_url, headers=headers)
         response.raise_for_status()
 
         # Create temporary file
@@ -303,7 +518,7 @@ async def download_document(file_url: str) -> str:
 
         temp_file = os.path.join(tempfile.gettempdir(), f"doc_{uuid.uuid4().hex}.pdf")
 
-        with open(temp_file, 'wb') as f:
+        with open(temp_file, "wb") as f:
             f.write(response.content)
 
         return temp_file
@@ -347,16 +562,67 @@ async def run_analysis(
         # Update progress: Document downloaded
         await update_analysis_job_db(job_id, "processing", progress=25)
 
-        # Basic document analysis (simulated)
+        # Basic document analysis (REAL PyMuPDF)
         if tools.get('pymupdf', True):
             logger.info("📄 Running PyMuPDF analysis...")
-            # Simulate analysis
-            await asyncio.sleep(2)
-            results['pymupdf_results'] = {
-                'text_content': 'Sample extracted text content',
-                'page_count': 1,
-                'char_count': 1000
-            }
+            print(f"📄 [ANALYSIS] Processing document: {document_path}")
+
+            try:
+                import fitz  # PyMuPDF
+
+                # Open and analyze the document
+                doc = fitz.open(document_path)
+                page_count = len(doc)
+                text_content = ""
+                images = []
+
+                print(f"📊 [ANALYSIS] Document has {page_count} pages")
+
+                # Extract text from all pages
+                for page_num in range(page_count):
+                    page = doc[page_num]
+                    page_text = page.get_text()
+                    text_content += f"Page {page_num + 1}:\n{page_text}\n\n"
+
+                    # Extract images info
+                    image_list = page.get_images()
+                    for img_index, img in enumerate(image_list):
+                        images.append({
+                            'page': page_num + 1,
+                            'index': img_index,
+                            'xref': img[0],
+                            'width': img[2] if len(img) > 2 else None,
+                            'height': img[3] if len(img) > 3 else None
+                        })
+
+                doc.close()
+
+                # Clean and process text
+                text_content = text_content.strip()
+                char_count = len(text_content)
+                word_count = len(text_content.split())
+
+                print(f"✅ [ANALYSIS] Extracted {char_count} characters, {word_count} words from {page_count} pages")
+
+                results['pymupdf_results'] = {
+                    'text_content': text_content,
+                    'page_count': page_count,
+                    'char_count': char_count,
+                    'word_count': word_count,
+                    'images': images,
+                    'images_count': len(images)
+                }
+
+            except Exception as e:
+                print(f"❌ [ANALYSIS] PyMuPDF analysis failed: {e}")
+                logger.error(f"PyMuPDF analysis failed: {e}")
+                # Fallback to simulated data if real analysis fails
+                results['pymupdf_results'] = {
+                    'text_content': f'Error extracting text: {str(e)}',
+                    'page_count': 1,
+                    'char_count': 0,
+                    'error': str(e)
+                }
 
             # Check for cancellation
             if await is_analysis_cancelled(job_id):
@@ -365,15 +631,53 @@ async def run_analysis(
 
             await update_analysis_job_db(job_id, "processing", progress=50)
 
-        # Table extraction (simulated)
+        # Table extraction (REAL PDFPlumber)
         if tools.get('pdfplumber', True):
             logger.info("📊 Running PDFPlumber analysis...")
-            # Simulate analysis
-            await asyncio.sleep(3)
-            results['pdfplumber_results'] = {
-                'tables': [{'data': 'Sample table data'}],
-                'table_count': 1
-            }
+            print(f"📊 [TABLES] Starting table extraction with PDFPlumber")
+
+            try:
+                import pdfplumber
+
+                tables = []
+                with pdfplumber.open(document_path) as pdf:
+                    for page_num, page in enumerate(pdf.pages):
+                        page_tables = page.extract_tables()
+
+                        for table_index, table in enumerate(page_tables):
+                            if table and len(table) > 0:
+                                # Clean and process table data
+                                cleaned_table = []
+                                for row in table:
+                                    if row and any(cell for cell in row if cell and str(cell).strip()):
+                                        cleaned_row = [str(cell).strip() if cell else '' for cell in row]
+                                        cleaned_table.append(cleaned_row)
+
+                                if cleaned_table:
+                                    tables.append({
+                                        'page': page_num + 1,
+                                        'table_index': table_index,
+                                        'data': cleaned_table,
+                                        'rows': len(cleaned_table),
+                                        'columns': len(cleaned_table[0]) if cleaned_table else 0
+                                    })
+
+                print(f"✅ [TABLES] Extracted {len(tables)} tables from document")
+
+                results['pdfplumber_results'] = {
+                    'tables': tables,
+                    'table_count': len(tables)
+                }
+
+            except Exception as e:
+                print(f"❌ [TABLES] PDFPlumber analysis failed: {e}")
+                logger.error(f"PDFPlumber analysis failed: {e}")
+                # Fallback to empty results if analysis fails
+                results['pdfplumber_results'] = {
+                    'tables': [],
+                    'table_count': 0,
+                    'error': str(e)
+                }
 
             # Check for cancellation
             if await is_analysis_cancelled(job_id):
@@ -382,21 +686,98 @@ async def run_analysis(
 
             await update_analysis_job_db(job_id, "processing", progress=75)
 
-        # AI Analysis (simulated)
+        # AI Analysis (REAL with extracted text)
         logger.info("🤖 Running AI analysis...")
-        await asyncio.sleep(2)
+        print(f"🤖 [AI-ANALYSIS] Starting AI analysis of extracted text")
 
         # Check for cancellation one more time
         if await is_analysis_cancelled(job_id):
             logger.info(f"❌ Analysis {job_id} cancelled during AI analysis")
             return
 
-        results['ai_results'] = {
-            'summary': 'Document analysis completed successfully',
-            'confidence': 0.85,
-            'components': ['Component A', 'Component B'],
-            'nomenclaturas': ['TAG-001', 'TAG-002']
-        }
+        try:
+            # Get the extracted text from PyMuPDF results
+            extracted_text = results.get('pymupdf_results', {}).get('text_content', '')
+
+            if extracted_text and len(extracted_text.strip()) > 0:
+                print(f"📋 [AI-ANALYSIS] Analyzing {len(extracted_text)} characters of text")
+
+                # Simple text analysis for components and tags
+                text_lower = extracted_text.lower()
+
+                # Extract component-like patterns
+                components = []
+                nomenclaturas = []
+
+                # Look for common technical drawing components
+                component_keywords = ['motor', 'valve', 'pump', 'sensor', 'filter', 'tank', 'pipe', 'bearing', 'gasket', 'seal', 'switch', 'relay', 'transformer', 'capacitor', 'resistor', 'connector']
+                for keyword in component_keywords:
+                    if keyword in text_lower:
+                        components.append(keyword.title())
+
+                # Look for tag patterns (alphanumeric codes)
+                import re
+                tag_patterns = [
+                    r'\b[A-Z]{1,3}[-_]?\d{2,4}\b',  # TAG-001, MT123, etc.
+                    r'\b\d{2,4}[-_][A-Z]{1,3}\b',   # 001-TAG, 123MT, etc.
+                    r'\bP&ID[-_]?\d+\b',            # P&ID references
+                    r'\b[A-Z]\d{2,4}[A-Z]?\b'       # A123B, M45, etc.
+                ]
+
+                for pattern in tag_patterns:
+                    matches = re.findall(pattern, extracted_text, re.IGNORECASE)
+                    nomenclaturas.extend(matches[:10])  # Limit to first 10 matches
+
+                # Remove duplicates
+                components = list(set(components))[:10]  # Limit to 10 components
+                nomenclaturas = list(set(nomenclaturas))[:10]  # Limit to 10 tags
+
+                # Calculate confidence based on how much useful data we found
+                confidence = 0.5  # Base confidence
+                if components:
+                    confidence += 0.2
+                if nomenclaturas:
+                    confidence += 0.2
+                if len(extracted_text) > 1000:
+                    confidence += 0.1
+                confidence = min(confidence, 0.95)  # Cap at 95%
+
+                # Generate summary
+                summary = f"Document analysis completed. Found {len(components)} components and {len(nomenclaturas)} nomenclaturas/tags in {results['pymupdf_results']['page_count']} pages."
+
+                print(f"✅ [AI-ANALYSIS] Found {len(components)} components, {len(nomenclaturas)} nomenclaturas")
+                print(f"📊 [AI-ANALYSIS] Confidence: {confidence:.2f}")
+
+                results['ai_results'] = {
+                    'summary': summary,
+                    'confidence': confidence,
+                    'components': components if components else ['No components identified'],
+                    'nomenclaturas': nomenclaturas if nomenclaturas else ['No nomenclaturas found'],
+                    'text_length': len(extracted_text),
+                    'analysis_method': 'rule_based_extraction'
+                }
+
+            else:
+                # No text extracted
+                print(f"⚠️ [AI-ANALYSIS] No text content available for AI analysis")
+                results['ai_results'] = {
+                    'summary': 'No text content could be extracted from the document',
+                    'confidence': 0.1,
+                    'components': ['Text extraction failed'],
+                    'nomenclaturas': ['No text available'],
+                    'error': 'No text content extracted'
+                }
+
+        except Exception as e:
+            print(f"❌ [AI-ANALYSIS] AI analysis failed: {e}")
+            logger.error(f"AI analysis failed: {e}")
+            results['ai_results'] = {
+                'summary': f'AI analysis failed: {str(e)}',
+                'confidence': 0.0,
+                'components': ['Analysis error'],
+                'nomenclaturas': ['Error occurred'],
+                'error': str(e)
+            }
 
         await update_analysis_job_db(job_id, "processing", progress=90)
 

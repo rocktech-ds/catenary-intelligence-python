@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   catenary-redis:
@@ -25,16 +25,18 @@ services:
     ports:
       - "8002:8003"
     environment:
+      - SUPABASE_API_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJjYXRlbmFyeSIsInJvbGUiOiJzZXJ2aWNlX3JvbGUiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiaWF0IjoxNzU5MTQwODMzLCJleHAiOjE3OTA2NzY4MzN9.CM4VTAJQZz-RN2EGZji13n-92ZqYdy4m9-KEXQo-S1w
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GROQ_API_KEY=${GROQ_API_KEY}
-      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL=postgresql://postgres:1fGHr5VyN8h94LzX2m3sKqWe9TpBdCxJ@172.17.0.1:6432/postgres
       - REDIS_URL=redis://catenary-redis:6379/0
       - REDIS_HOST=catenary-redis
       - REDIS_PORT=6379
       - REDIS_DB=0
-      - REDIS_TTL=3600  # Cache TTL in seconds (1 hour)
+      - REDIS_TTL=3600
     volumes:
       - ./data:/app/data
+      - catenary-supabase_catenary_storage_data:/var/lib/storage:ro
     restart: unless-stopped
     depends_on:
       catenary-redis:
@@ -57,3 +59,5 @@ networks:
 volumes:
   redis_data:
     driver: local
+  catenary-supabase_catenary_storage_data:
+    external: true

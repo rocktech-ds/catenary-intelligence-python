@@ -1,0 +1,1 @@
+2025/09/17 15:28:07 [error] 20#20: *33 connect() failed (111: Connection refused) while connecting to upstream, client: 101.36.123.102, server: localhost, request: "GET /api/vendor/phpunit/phpunit/src/Util/PHP/eval-stdin.php HTTP/1.1", upstream: "http://172.20.0.12:8000/vendor/phpunit/phpunit/src/Util/PHP/eval-stdin.php", host: "204.44.123.122:80"

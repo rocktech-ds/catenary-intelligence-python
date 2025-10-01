@@ -1,0 +1,70 @@
+name: Deploy Intelligence Service to VPS
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+
+      - name: Add VPS to known hosts
+        run: |
+          ssh-keyscan -H 204.44.123.122 >> ~/.ssh/known_hosts
+
+      - name: Deploy to VPS
+        run: |
+          ssh root@204.44.123.122 << 'ENDSSH'
+            # Navigate to intelligence service directory
+            cd /root/catenary-intelligence
+
+            # Stop current service
+            echo "Stopping current intelligence service..."
+            docker compose down
+
+            # Pull latest code from GitHub
+            echo "Pulling latest code..."
+            git pull origin main || git pull origin master
+
+            # Build new image
+            echo "Building new Docker image..."
+            docker compose build --no-cache catenary-intelligence
+
+            # Start the service
+            echo "Starting intelligence service..."
+            docker compose up -d
+
+            # Wait for service to start
+            echo "Waiting for service to start..."
+            sleep 15
+
+            # Verify deployment
+            echo "Verifying deployment..."
+            curl -f http://localhost:8003/health && echo "Internal health check passed" || (echo "Internal health check failed" && exit 1)
+
+            echo "Deployment completed successfully"
+          ENDSSH
+
+      - name: External Health Check
+        run: |
+          echo "Running external health check..."
+          sleep 5
+          curl -f http://204.44.123.122:8002/health && echo "External health check passed" || (echo "External health check failed" && exit 1)
+
+      - name: Deployment Status
+        run: |
+          echo "✅ Intelligence Service deployed successfully!"
+          echo "🔗 Service URL: http://204.44.123.122:8002"
+          echo "🏥 Health Check: http://204.44.123.122:8002/health"

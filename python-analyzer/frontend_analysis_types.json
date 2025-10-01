@@ -1,0 +1,327 @@
+{
+  "analysis_types": {
+    "existing": {
+      "nomenclaturas": {
+        "id": "nomenclaturas",
+        "name": "Nomenclaturas",
+        "description": "Identificação de nomenclaturas técnicas",
+        "enabled": true,
+        "icon": "✅"
+      },
+      "bom_extraction": {
+        "id": "bom_extraction", 
+        "name": "Extração BOM",
+        "description": "Lista de materiais e componentes",
+        "enabled": true,
+        "icon": "✅"
+      },
+      "tag_analysis": {
+        "id": "tag_analysis",
+        "name": "Análise TAGs", 
+        "description": "Identificação de tags e referências",
+        "enabled": true,
+        "icon": "✅"
+      },
+      "metadata_extraction": {
+        "id": "metadata_extraction",
+        "name": "Metadados",
+        "description": "Informações do documento", 
+        "enabled": true,
+        "icon": "✅"
+      },
+      "ai_summary": {
+        "id": "ai_summary",
+        "name": "Resumo IA",
+        "description": "Resumo inteligente do conteúdo",
+        "enabled": true,
+        "icon": "✅"
+      },
+      "component_detection": {
+        "id": "component_detection",
+        "name": "Detecção Componentes",
+        "description": "Identificação automática de componentes",
+        "enabled": true,
+        "icon": "✅"
+      },
+      "stamp_detection": {
+        "id": "stamp_detection",
+        "name": "Detecção de Carimbos",
+        "description": "Identificação de carimbos de aprovação, selos profissionais e assinaturas",
+        "enabled": true,
+        "icon": "🏷️",
+        "category": "engineering",
+        "api_endpoint": "/analyze/enhanced",
+        "python_capability": "StampDetector with text patterns + AI enhancement",
+        "benefits": "Validação de aprovações, rastreamento de responsabilidades"
+      },
+      "layout_analysis": {
+        "id": "layout_analysis", 
+        "name": "Análise de Layout",
+        "description": "Detecção automática de áreas: título, desenho, legenda, notas",
+        "enabled": true,
+        "icon": "🗂️",
+        "category": "structure",
+        "api_endpoint": "/analyze/enhanced",
+        "python_capability": "AdvancedLayoutAnalyzer + Computer Vision APIs",
+        "benefits": "Extração contextual, melhor precisão"
+      },
+      "revision_tracking": {
+        "id": "revision_tracking",
+        "name": "Rastreamento de Revisões",
+        "description": "Extração de histórico de alterações, aprovações e datas",
+        "enabled": true,
+        "icon": "📝",
+        "category": "engineering",
+        "api_endpoint": "/analyze/enhanced",
+        "python_capability": "AdvancedRevisionTracker + AI normalization", 
+        "benefits": "Auditoria, controle de versões"
+      },
+      "assembly_detection": {
+        "id": "assembly_detection",
+        "name": "Detecção de Montagens",
+        "description": "Identifica sub-montagens, conexões e hierarquias de componentes",
+        "enabled": true,
+        "icon": "🔧",
+        "category": "engineering",
+        "api_endpoint": "/analyze/enhanced",
+        "python_capability": "AdvancedAssemblyDetector + BOM extraction",
+        "benefits": "BOM hierárquico, instruções montagem"
+      },
+      "enhanced_table_extraction": {
+        "id": "enhanced_table_extraction",
+        "name": "Extração Avançada de Tabelas",
+        "description": "Múltiplas bibliotecas + AI para máxima precisão",
+        "enabled": true,
+        "icon": "📊",
+        "category": "structure",
+        "api_endpoint": "/analyze/enhanced",
+        "python_capability": "FreeTableExtractor (Tabula + Camelot + PDFPlumber)",
+        "benefits": "Tabelas complexas, deduplicação, normalização"
+      },
+      "ai_consensus": {
+        "id": "ai_consensus",
+        "name": "Análise por Consenso IA",
+        "description": "Validação cruzada entre múltiplos AIs para maior precisão",
+        "enabled": true,
+        "icon": "🤝",
+        "category": "ai_advanced",
+        "api_endpoint": "/analyze/enhanced",
+        "python_capability": "Multi-provider AI with free services integration",
+        "benefits": "Máxima precisão, redução de erros"
+      },
+      "quality_validation": {
+        "id": "quality_validation",
+        "name": "Validação de Qualidade",
+        "description": "Verificação de completude, consistência e conformidade",
+        "enabled": true,
+        "icon": "✔️",
+        "category": "validation",
+        "api_endpoint": "/analyze/enhanced",
+        "python_capability": "QA system with confidence scoring",
+        "benefits": "Relatórios de confiança, detecção erros"
+      },
+      "technical_specs": {
+        "id": "technical_specs",
+        "name": "Especificações Técnicas",
+        "description": "Extração de materiais, tolerâncias, dimensões e propriedades",
+        "enabled": true,
+        "icon": "📐",
+        "category": "engineering",
+        "api_endpoint": "/analyze/enhanced",
+        "python_capability": "TechnicalSpecsExtractor with regex patterns + LLM normalization",
+        "benefits": "Dados estruturados, validação técnica, conformidade de materiais"
+      },
+      "dimensional_analysis": {
+        "id": "dimensional_analysis",
+        "name": "Análise Dimensional",
+        "description": "Extração e validação de cotas, medidas, tolerâncias e GD&T",
+        "enabled": true,
+        "icon": "📏",
+        "category": "engineering",
+        "api_endpoint": "/analyze/enhanced",
+        "python_capability": "DimensionalAnalyzer with GD&T recognition + coordinate systems",
+        "benefits": "Dados dimensionais precisos, análise de tolerâncias, GD&T"
+      },
+      "vector_graphics": {
+        "id": "vector_graphics",
+        "name": "Análise Gráfica Vetorial",
+        "description": "Detecção de símbolos CAD, formas geométricas e elementos de desenho técnico",
+        "enabled": true,
+        "icon": "🎨",
+        "category": "graphics",
+        "api_endpoint": "/analyze/enhanced",
+        "python_capability": "VectorGraphicsExtractor with OpenCV + CAD symbol recognition",
+        "benefits": "Identificação símbolos, análise geometric, classificação desenhos"
+      }
+    },
+    "missing_from_frontend": {
+      "cross_reference_linking": {
+        "id": "cross_reference_linking",
+        "name": "Ligação de Referências",
+        "description": "Conecta callouts com itens BOM, detalhes com vistas principais",
+        "enabled": false,
+        "icon": "🔗",
+        "category": "relationships", 
+        "python_capability": "CalloutLinker with vector analysis",
+        "benefits": "Navegação inteligente, validação cruzada"
+      },
+      "multi_page_analysis": {
+        "id": "multi_page_analysis",
+        "name": "Análise Multi-Página",
+        "description": "Correlaciona desenho principal com folhas de detalhes",
+        "enabled": false, 
+        "icon": "📄",
+        "category": "structure",
+        "python_capability": "Document relationship mapping",
+        "benefits": "Visão completa do projeto"
+      },
+      "handwriting_recognition": {
+        "id": "handwriting_recognition", 
+        "name": "Reconhecimento Manuscrito",
+        "description": "Leitura de anotações manuais, correções e notas de campo",
+        "enabled": false,
+        "icon": "✍️",
+        "category": "ocr",
+        "python_capability": "Advanced OCR + handwriting models",
+        "benefits": "Captura total de informação"
+      },
+      "standards_compliance": {
+        "id": "standards_compliance",
+        "name": "Conformidade Normas",
+        "description": "Verificação de padrões ferroviários, códigos e regulamentos",
+        "enabled": false,
+        "icon": "📋",
+        "category": "compliance",
+        "python_capability": "Rule engine + standards database", 
+        "benefits": "Auditoria automática, conformidade"
+      },
+      "multi_language_support": {
+        "id": "multi_language_support",
+        "name": "Suporte Multi-Idioma",
+        "description": "Processamento em PT, EN, ES com terminologia especializada", 
+        "enabled": false,
+        "icon": "🌐",
+        "category": "localization",
+        "python_capability": "Language detection + specialized dictionaries",
+        "benefits": "Projetos internacionais, precisão contextual"
+      },
+      "confidence_scoring": {
+        "id": "confidence_scoring",
+        "name": "Pontuação de Confiança",
+        "description": "Score de confiabilidade por campo extraído",
+        "enabled": false,
+        "icon": "📊",
+        "category": "quality",
+        "python_capability": "ML confidence models + validation",
+        "benefits": "Priorização manual, controle qualidade"
+      },
+      "error_correction": {
+        "id": "error_correction",
+        "name": "Correção Inteligente",
+        "description": "Auto-correção de erros OCR usando IA e contexto técnico",
+        "enabled": false,
+        "icon": "🛠️", 
+        "category": "ai_advanced",
+        "python_capability": "LLM-powered error correction + domain knowledge",
+        "benefits": "Dados mais limpos, menos intervenção manual"
+      },
+    }
+  },
+  "categories": {
+    "engineering": {
+      "name": "Engenharia Especializada",
+      "icon": "⚙️",
+      "color": "#2563eb"
+    },
+    "structure": {
+      "name": "Estrutura Documental", 
+      "icon": "🗂️",
+      "color": "#7c3aed"
+    },
+    "relationships": {
+      "name": "Relacionamentos",
+      "icon": "🔗", 
+      "color": "#dc2626"
+    },
+    "graphics": {
+      "name": "Análise Gráfica",
+      "icon": "📊",
+      "color": "#059669"
+    },
+    "ocr": {
+      "name": "Reconhecimento Texto",
+      "icon": "👁️",
+      "color": "#d97706"
+    },
+    "validation": {
+      "name": "Validação & QA",
+      "icon": "✔️", 
+      "color": "#0891b2"
+    },
+    "compliance": {
+      "name": "Conformidade",
+      "icon": "📋",
+      "color": "#7c2d12"
+    },
+    "localization": {
+      "name": "Localização",
+      "icon": "🌐",
+      "color": "#4338ca"
+    },
+    "ai_advanced": {
+      "name": "IA Avançada",
+      "icon": "🧠",
+      "color": "#be185d"
+    },
+    "quality": {
+      "name": "Controle Qualidade", 
+      "icon": "📈",
+      "color": "#166534"
+    }
+  },
+  "ai_provider_capabilities": {
+    "consensus_mode": {
+      "name": "Modo Consenso",
+      "description": "Executa todos os provedores e gera consenso",
+      "benefits": "Máxima precisão, validação cruzada"
+    },
+    "performance_mode": {
+      "name": "Modo Performance", 
+      "description": "Usa o provedor mais rápido disponível",
+      "benefits": "Menor latência, economia de tokens"
+    },
+    "accuracy_mode": {
+      "name": "Modo Precisão",
+      "description": "Usa o provedor mais preciso para o tipo de documento",
+      "benefits": "Melhor qualidade de extração"
+    }
+  },
+  "integration_recommendations": {
+    "completed": {
+      "phase_1": [
+        "stamp_detection",
+        "layout_analysis", 
+        "revision_tracking",
+        "assembly_detection",
+        "enhanced_table_extraction",
+        "ai_consensus",
+        "quality_validation",
+        "technical_specs",
+        "dimensional_analysis",
+        "vector_graphics"
+      ]
+    },
+    "next_phases": {
+      "phase_2": [
+        "cross_reference_linking",
+        "multi_page_analysis"
+      ],
+      "phase_3": [
+        "handwriting_recognition",
+        "standards_compliance",
+        "multi_language_support",
+        "error_correction"
+      ]
+    }
+  }
+}

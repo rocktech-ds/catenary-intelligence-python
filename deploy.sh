@@ -1,113 +1,84 @@
 #!/bin/bash
 
-# Enhanced Catenary Intelligence Deployment Script
-# Deploys the complete system with all 15 advanced extractors
+# Deployment script for Catenary Intelligence Service
+# This script handles deployment on the VPS
 
-set -e
+set -e  # Exit on any error
 
-echo "🚀 Starting Enhanced Catenary Intelligence Deployment"
-echo "=================================================="
+echo "🚀 Starting deployment of Catenary Intelligence Service..."
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
-
-# Function to print colored output
-print_status() {
-    echo -e "${GREEN}[INFO]${NC} $1"
-}
-
-print_warning() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
-}
-
-print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-# Check if Docker is running
-if ! docker info > /dev/null 2>&1; then
-    print_error "Docker is not running. Please start Docker first."
+# Check if we're in the right directory
+if [[ ! -f "docker-compose.yml" ]]; then
+    echo "❌ Error: docker-compose.yml not found. Are you in the right directory?"
     exit 1
 fi
 
-print_status "Docker is running ✓"
+# Function to check service health
+check_health() {
+    local url=$1
+    local max_attempts=10
+    local attempt=1
 
-# Create necessary network if it doesn't exist
-if ! docker network ls | grep -q supabase_default; then
-    print_warning "Creating supabase_default network..."
-    docker network create supabase_default
+    echo "🏥 Checking health at $url..."
+
+    while [ $attempt -le $max_attempts ]; do
+        if curl -f -s "$url" > /dev/null 2>&1; then
+            echo "✅ Health check passed!"
+            return 0
+        fi
+
+        echo "⏳ Attempt $attempt/$max_attempts failed, waiting 5 seconds..."
+        sleep 5
+        ((attempt++))
+    done
+
+    echo "❌ Health check failed after $max_attempts attempts"
+    return 1
+}
+
+# Stop existing service
+echo "🛑 Stopping existing service..."
+docker compose down
+
+# Pull latest code if this is a git repository
+if [ -d ".git" ]; then
+    echo "📥 Pulling latest code..."
+    git pull origin main || git pull origin master || echo "⚠️  Git pull failed, continuing with local changes"
 fi
 
-print_status "Network check completed ✓"
+# Build the service
+echo "🏗️  Building Docker image..."
+docker compose build --no-cache catenary-intelligence
 
-# Build and deploy the intelligence service
-print_status "Building intelligence intelligence service..."
+# Start the service
+echo "▶️  Starting intelligence service..."
+docker compose up -d
 
-# Stop any existing old services
-print_status "Stopping old services..."
-docker stop pdf-intelligence-pipeline 2>/dev/null || true
-docker rm pdf-intelligence-pipeline 2>/dev/null || true
+# Wait for service to start
+echo "⏳ Waiting for service to initialize..."
+sleep 15
 
-# Build and start the intelligence service
-print_status "Starting intelligence services..."
-docker-compose -f docker-compose.intelligence.yml up -d --build
-
-print_status "Waiting for services to become healthy..."
-sleep 30
-
-# Check health of services
-print_status "Checking service health..."
-
-# Check intelligence service health
-if curl -f http://localhost:8002/health > /dev/null 2>&1; then
-    print_status "Enhanced Intelligence Service is healthy ✓"
+# Check internal health
+if check_health "http://localhost:8003/health"; then
+    echo "✅ Internal health check passed"
 else
-    print_error "Enhanced Intelligence Service is not responding"
-    docker-compose -f docker-compose.intelligence.yml logs catenary-intelligence-intelligence
+    echo "❌ Internal health check failed"
+    docker compose logs catenary-intelligence
     exit 1
 fi
 
-# Check nginx health (if ports 80/443 are accessible)
-if curl -f http://localhost:80/health > /dev/null 2>&1; then
-    print_status "NGINX is healthy ✓"
+# Check external health
+if check_health "http://204.44.123.122:8002/health"; then
+    echo "✅ External health check passed"
 else
-    print_warning "NGINX health check failed (may be normal if SSL redirect is active)"
+    echo "❌ External health check failed"
+    docker compose logs catenary-intelligence
+    exit 1
 fi
 
-# Show service status
-print_status "Deployment Summary:"
-echo "=================================================="
-docker-compose -f docker-compose.intelligence.yml ps
-
-print_status "Service URLs:"
-echo "  Enhanced Intelligence API: http://localhost:8002"
-echo "  Health Check: http://localhost:8002/health"
-echo "  Capabilities: http://localhost:8002/capabilities"
-
-print_status "Available Extractors (15 total):"
-echo "  ✅ Stamp Detection"
-echo "  ✅ Layout Analysis"
-echo "  ✅ Revision Tracking"
-echo "  ✅ Assembly Detection"
-echo "  ✅ Technical Specifications"
-echo "  ✅ Dimensional Analysis"
-echo "  ✅ Vector Graphics Analysis"
-echo "  ✅ Enhanced Table Extraction"
-echo "  ✅ AI Consensus Analysis"
-echo "  ✅ Quality Validation"
-echo "  ✅ Error Correction"
-echo "  ✅ Intelligent Normalization"
-echo "  ✅ Multi-language Processing"
-echo "  ✅ Standards Compliance"
-echo "  ✅ Performance Optimization"
-
 echo ""
-print_status "🎉 Enhanced Catenary Intelligence System Deployed Successfully!"
-print_status "The system is now running with all 15 advanced extractors."
+echo "🎉 Deployment completed successfully!"
+echo "🔗 Service URL: http://204.44.123.122:8002"
+echo "🏥 Health Check: http://204.44.123.122:8002/health"
+echo "📊 View logs: docker compose logs -f catenary-intelligence"
 echo ""
-echo "To view logs: docker-compose -f docker-compose.intelligence.yml logs -f"
-echo "To stop: docker-compose -f docker-compose.intelligence.yml down"
-echo "To update: ./deploy.sh"
